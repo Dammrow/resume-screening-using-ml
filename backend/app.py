@@ -1,12 +1,21 @@
 import os
+import uuid
 from flask import Flask, jsonify, request
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-UPLOAD_FOLDER = "uploads"
-ALLOWED_EXTENSIONS = {"pdf"}
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+ALLOWED_EXTENSIONS = {"pdf", "docx"}
+ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/octet-stream"
+}
+
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 *1024
 
 os.makedirs(UPLOAD_FOLDER, exist_ok = True)
 
@@ -20,7 +29,7 @@ def health():
 @app.route("/upload-resume", methods = ["POST"])
 def upload_resume():
     if "file" not in request.files:
-        return jsonify({"Error": "No file part in request"}),400
+        return jsonify({"Error": "No file part in request"}), 400
     
     file = request.files["file"]
 
@@ -28,13 +37,23 @@ def upload_resume():
         return jsonify({"Error": "No file selected"}), 400
     
     if not allowed_file(file.filename):
-        return jsonify({"Error": "Only .pdf files are allowed"}), 400
+        return jsonify({"Error": "Only PDF and DOCX files are allowed"}), 400
     
-    filename = secure_filename(file.filename)
-    save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+    if file.mimetype not in ALLOWED_MIME_TYPES:
+        return jsonify({"Error": "Invalid file type"}), 400
+    
+    original_filename = secure_filename(file.filename)
+    ext = original_filename.rsplit(".", 1)[1].lower()
+    stored_filename = f"{uuid.uuid4()}.{ext}"
+
+    save_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_filename)
     file.save(save_path)
 
-    return jsonify({"Message": "File uploaded successfully", "filename": filename})
+    return jsonify({
+        "Message": "File uploaded successfully", 
+        "Original filename": original_filename,
+        "Stored filename": stored_filename
+        }), 201
 
 if __name__ == "__main__":
     app.run(debug = True)
