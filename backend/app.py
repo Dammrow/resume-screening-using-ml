@@ -2,6 +2,7 @@ import os
 import uuid
 from flask import Flask, jsonify, request
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
 
@@ -14,7 +15,7 @@ ALLOWED_MIME_TYPES = {
     "application/octet-stream"
 }
 
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["UPLOAD_FOLDER"] = os.getenv("UPLOAD_FOLDER", UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 *1024
 
 os.makedirs(UPLOAD_FOLDER, exist_ok = True)
@@ -54,6 +55,10 @@ def upload_resume():
         "Original filename": original_filename,
         "Stored filename": stored_filename
         }), 201
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    return jsonify({"Error": "File too large. Max size is 5MB."}), 413
 
 if __name__ == "__main__":
     app.run(debug = True)
