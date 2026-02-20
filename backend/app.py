@@ -60,5 +60,47 @@ def upload_resume():
 def handle_file_too_large(e):
     return jsonify({"Error": "File too large. Max size is 5MB."}), 413
 
+@app.route("/matcher", methods = ["POST"])
+def matcher():
+    job_description = request.form.get("job_description")
+
+    if not job_description:
+        return jsonify({"Error": "Job description is required"}), 400
+    
+    if "resumes" not in request.files:
+        return jsonify({"Error": "No resumes uploaded"}), 400
+    
+    files = request.files.getlist("resumes")
+
+    if len(files) < 1:
+        return jsonify({"Error": "Please upload at least one resume"}), 400
+    
+    saved_files = []
+
+    for file in files:
+        if file.filename == "":
+            continue
+
+        if not allowed_file(file.filename):
+            return jsonify({"Error": f"Invalid file type: {file.filename}"}), 400
+        
+        original_filename = secure_filename(file.filename)
+        ext = original_filename.rsplit(".", 1)[1].lower()
+        stored_filename = f"{uuid.uuid4()}.{ext}"
+
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_filename)
+        file.save(save_path)
+
+        saved_files.append({
+            "Original filename": original_filename,
+            "Stored filename": stored_filename
+        })
+
+    return jsonify({
+        "Message": "Resumes uploaded successfully",
+        "Job description length": len(job_description),
+        "Files saved": saved_files
+    }), 200
+
 if __name__ == "__main__":
     app.run(debug = True)
