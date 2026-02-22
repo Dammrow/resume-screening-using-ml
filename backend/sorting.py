@@ -4,52 +4,57 @@ from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RESUME_FOLDER = os.path.join(BASE_DIR, "resume-uploads")
 
-RESUME_FOLDER="Resume"
 def extract_text_from_pdf(path):
-    text = ""
+    chunks = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
-            text += page.extract_text() or ""
-    return text
-
+            page_text = page.extract_text()
+            if page_text:
+                chunks.append(page_text)
+    return "\n".join(chunks)
 
 def extract_text_from_docx(path):
     doc = Document(path)
-    return "\n".join([para.text for para in doc.paragraphs])
-
+    return "\n".join(p.text for p in doc.paragraphs if p.text)
 
 def load_resumes():
     resumes = []
     filenames = []
 
-    for file in os.listdir(RESUME_FOLDER):
-        
-        file_path = os.path.join(RESUME_FOLDER, file)
+    if not os.path.exists(RESUME_FOLDER):
+        return resumes, filenames
 
-        if file.endswith(".txt"):
-            with open(file_path, "r", encoding="utf-8") as f:
-                text = f.read()
+    for filename in os.listdir(RESUME_FOLDER):
+        file_path = os.path.join(RESUME_FOLDER, filename)
 
-        elif file.endswith(".pdf"):
-            text = extract_text_from_pdf(file_path)
+        try:
+            if filename.lower().endswith(".pdf"):
+                text = extract_text_from_pdf(file_path)
 
-        elif file.endswith(".docx"):
-            text = extract_text_from_docx(file_path)
+            elif filename.lower().endswith(".docx"):
+                text = extract_text_from_docx(file_path)
 
-        else:
+            else:
+                continue
+        except Exception:
+            # Skip files that fail to parse
             continue
 
-        if text.strip():  
+        if text and text.strip():
             resumes.append(text)
-            filenames.append(file)
+            filenames.append(filename)
 
     return resumes, filenames
 
-
 def rank_resumes(query):
-    
     resumes, filenames = load_resumes()
+
+    if not resumes:
+        return []
+
     documents = resumes + [query]
 
     vectorizer = TfidfVectorizer(stop_words="english")
@@ -64,11 +69,3 @@ def rank_resumes(query):
     results.sort(key=lambda x: x[1], reverse=True)
 
     return results
-
-
-if __name__ == "__main__":
-    query = input("Enter job role: ")
-    ranked = rank_resumes(query)
-
-    for filename, score in ranked:
-        print(f"{filename} -> {100*score:.0f}")

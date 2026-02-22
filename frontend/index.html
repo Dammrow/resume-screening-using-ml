@@ -11,6 +11,7 @@
         }
         .container {
             margin-top: 50px;
+            max-width: 800px;   
         }
         .card {
             padding: 20px;
@@ -23,11 +24,14 @@
             border-radius: 10px 10px 0 0;
             padding: 10px 20px;
         }
-        .card-body {
-            padding: 20px;
+        .result-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
         }
-        .form-group {
-            margin-bottom: 1.5rem;
+        .score {
+            font-weight: bold;
         }
     </style>
 </head>
@@ -38,21 +42,83 @@
                 <h2>Job Description and Resume Matcher</h2>
             </div>
             <div class="card-body">
-                <form method="POST" action="http://127.0.0.1:5000/matcher" enctype="multipart/form-data">
+                <form id="matcherForm" enctype="multipart/form-data">
                     <div class="form-group">
                         <label for="job_description">Job Description:</label>
                         <textarea class="form-control" id="job_description" name="job_description" rows="5" required></textarea>
                     </div>
                     <div class="form-group">
                         <label for="resumes">Upload Resumes:</label>
-                        <p>Please upload more than 5 Resumes</p>
+                        <p class="text-muted">Upload PDF or DOCX resumes</p>
                         <input type="file" class="form-control" id="resumes" name="resumes" multiple required accept=".pdf, .docx">
                     </div>
                     <button type="submit" class="btn btn-primary">Match Resumes</button>
                 </form>
+
+                <div id="results" class="mt-4 d-none">
+                    <h5>Ranking Results</h5>
+                    <ul class="list-group result-list" id="resultsList"></ul>
+                </div>
+
+                <div id="error" class="alert alert-danger mt-3 d-none"></div>
             </div>
         </div>
     </div>
+
+    <script>
+        const form = document.getElementById("matcherForm");
+        const resultsDiv = document.getElementById("results");
+        const resultsList = document.getElementById("resultsList");
+        const errorDiv = document.getElementById("error");
+
+        form.addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            resultsDiv.classList.add("d-none");
+            errorDiv.classList.add("d-none");
+            resultsList.innerHTML = "";
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch("http://127.0.0.1:5000/matcher", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    errorDiv.textContent = data.error || "Something went wrong";
+                    errorDiv.classList.remove("d-none");
+                    return;
+                }
+
+                if (!data.rankings || data.rankings.length === 0) {
+                    errorDiv.textContent = "No resumes found to rank.";
+                    errorDiv.classList.remove("d-none");
+                    return;
+                }
+
+                data.rankings.forEach(item => {
+                    const li = document.createElement("li");
+                    li.className = "list-group-item d-flex justify-content-between align-items-center";
+                    li.innerHTML = `
+                        <span>${item.filename}</span>
+                        <span class="badge badge-primary badge-pill">${(item.score * 100).toFixed(1)}%</span>
+                    `;
+                    resultsList.appendChild(li);
+                });
+
+                resultsDiv.classList.remove("d-none");
+
+            } catch (err) {
+                errorDiv.textContent = "Server not reachable. Is Flask running?";
+                errorDiv.classList.remove("d-none");
+            }
+        });
+    </script>
+
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
