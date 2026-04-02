@@ -1,55 +1,84 @@
+# this ml feature
 import os
 import pdfplumber
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from pdf2image import convert_from_path
+import pytesseract
 
+# Set path to tesseract (IMPORTANT for Windows)
+pytesseract.pytesseract.tesseract_cmd = r"C:/Program Files/Tesseract-OCR/tesseract.exe"
 
-RESUME_FOLDER="Resume"
-def extract_text_from_pdf(path):
+def extract_text_with_ocr(pdf_path):
     text = ""
-    with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text() or ""
+
+    try:
+        images = convert_from_path(pdf_path, poppler_path=r"C:/poppler/Library/bin")
+        for img in images:
+            text += pytesseract.image_to_string(img)
+
+    except Exception as e:
+        print("OCR failed:", e)
+
     return text
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESUME_FOLDER = os.path.join(BASE_DIR, "Resume")
+
+def extract_text_from_pdf(path):
+    chunks = []
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                chunks.append(page_text)
+    return "\n".join(chunks)
 
 def extract_text_from_docx(path):
     doc = Document(path)
-    return "\n".join([para.text for para in doc.paragraphs])
-
+    return "\n".join(p.text for p in doc.paragraphs if p.text)
 
 def load_resumes():
     resumes = []
     filenames = []
 
-    for file in os.listdir(RESUME_FOLDER):
-        
-        file_path = os.path.join(RESUME_FOLDER, file)
+    if not os.path.exists(RESUME_FOLDER):
+        return resumes, filenames
 
-        if file.endswith(".txt"):
-            with open(file_path, "r", encoding="utf-8") as f:
-                text = f.read()
+    for filename in os.listdir(RESUME_FOLDER):
+        file_path = os.path.join(RESUME_FOLDER, filename)
 
-        elif file.endswith(".pdf"):
-            text = extract_text_from_pdf(file_path)
+        try:
+            if filename.lower().endswith(".pdf"):
+                text = extract_text_from_pdf(file_path)
 
-        elif file.endswith(".docx"):
-            text = extract_text_from_docx(file_path)
+                # OCR fallback if no text found
+                if not text.strip() or len(text.strip()) < 50:
+                    print(f"OCR used for: {filename}")
+                    text = extract_text_with_ocr(file_path)
 
-        else:
+            elif filename.lower().endswith(".docx"):
+                text = extract_text_from_docx(file_path)
+
+            else:
+                continue
+        except Exception:
+            # Skip files that fail to parse
             continue
 
-        if text.strip():  
+        if text and text.strip():
             resumes.append(text)
-            filenames.append(file)
+            filenames.append(filename)
 
     return resumes, filenames
 
-
 def rank_resumes(query):
-    
     resumes, filenames = load_resumes()
+
+    if not resumes:
+        return []
+
     documents = resumes + [query]
 
     vectorizer = TfidfVectorizer(stop_words="english")
@@ -64,8 +93,6 @@ def rank_resumes(query):
     results.sort(key=lambda x: x[1], reverse=True)
 
     return results
-
-
 if __name__ == "__main__":
     query = input("Enter job role: ")
     ranked = rank_resumes(query)
